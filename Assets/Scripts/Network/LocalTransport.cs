@@ -9,15 +9,16 @@ public class LocalTransport : MonoBehaviour, INetworkTransport
     public float LatencyMs = 100f;
 
     [Range(0f, 1f)]
-    public float PacketLoss = 0.1f;
+    public float PacketLoss = 0f;
 
     private LocalTransport remote;
     private bool connected;
 
     public bool IsConnected => connected;
 
-    public event Action<byte[]> MessageReceived;
-    public event Action Disconnected;
+        public event Action<byte[]> MessageReceived;
+        public event Action Disconnected;
+        public event Action Reconnected;
 
     public void Initialize()
     {
@@ -29,15 +30,32 @@ public class LocalTransport : MonoBehaviour, INetworkTransport
         remote = other;
     }
 
+        public void Reconnect()
+        {
+            SetConnected(true);
+
+            Reconnected?.Invoke();
+
+            if (remote != null)
+            {
+                remote.SetConnected(true);
+                remote.Reconnected?.Invoke();
+            }
+
+            Debug.Log("[LocalTransport] Link restored.");
+        }
+
     public void Send(byte[] data)
     {
         if (!connected)
             return;
 
-        if (remote == null || !remote.IsConnected)
+        if (remote == null || !remote.connected)
             return;
 
-        // Имитация потери пакета.
+        if (data == null || data.Length == 0)
+            return;
+
         if (UnityEngine.Random.value < PacketLoss)
         {
             Debug.Log(
@@ -60,7 +78,7 @@ public class LocalTransport : MonoBehaviour, INetworkTransport
         if (!connected)
             yield break;
 
-        if (remote == null || !remote.IsConnected)
+        if (remote == null || !remote.connected)
             yield break;
 
         remote.Receive(data);
@@ -101,5 +119,10 @@ public class LocalTransport : MonoBehaviour, INetworkTransport
         StopAllCoroutines();
 
         Disconnected?.Invoke();
+    }
+
+    private void SetConnected(bool value)
+    {
+        connected = value;
     }
 }

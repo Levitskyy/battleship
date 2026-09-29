@@ -17,27 +17,26 @@ public class ReliableOrderedTransport : INetworkTransport
     private readonly float retryTimeout;
     private readonly int maxRetries;
 
-    // Следующий sequence для исходящего сообщения.
-    private int nextSendSequence = 1;
+    public bool VerboseLogging;
 
-    // Какой sequence мы ждём от удалённой стороны.
+    private int nextSendSequence = 1;
     private int expectedReceiveSequence = 1;
 
-    // Пакеты, которые отправили, но ещё не получили ACK.
     private readonly Dictionary<int, PendingPacket> pendingPackets =
         new Dictionary<int, PendingPacket>();
 
-    // Пакеты, которые пришли раньше времени.
     private readonly Dictionary<int, byte[]> receiveBuffer =
         new Dictionary<int, byte[]>();
 
     private bool disposed;
+    private Coroutine retryRoutine;
 
     public bool IsConnected =>
         !disposed && innerTransport.IsConnected;
 
     public event Action<byte[]> MessageReceived;
     public event Action Disconnected;
+    public event Action Reconnected;
 
     private class PendingPacket
     {
@@ -59,8 +58,9 @@ public class ReliableOrderedTransport : INetworkTransport
 
         innerTransport.MessageReceived += OnRawMessageReceived;
         innerTransport.Disconnected += OnInnerDisconnected;
+        innerTransport.Reconnected += OnInnerReconnected;
 
-        coroutineHost.StartCoroutine(RetryLoop());
+        StartRetryLoop();
     }
 
     public void Send(byte[] data)
@@ -88,20 +88,56 @@ public class ReliableOrderedTransport : INetworkTransport
                 RetryCount = 0
             };
 
-        Debug.Log(
-            $"[ReliableTransport] Send DATA #{sequence}");
+        if (VerboseLogging)
+        {
+            Debug.Log(
+                $"[ReliableTransport] Send DATA #{sequence}");
+        }
 
         innerTransport.Send(packet);
+    }
+
+    public void Reconnect()
+    {
+        innerTransport.Reconnect();
+    }
+
+    private void OnInnerReconnected()
+    {
+        disposed = false;
+        nextSendSequence = 1;
+        expectedReceiveSequence = 1;
+
+        pendingPackets.Clear();
+        receiveBuffer.Clear();
+
+        StartRetryLoop();
+
+        Reconnected?.Invoke();
+
+        Debug.Log(
+            "[ReliableTransport] Sequence state reset.");
+    }
+
+    private void StartRetryLoop()
+    {
+        if (coroutineHost == null)
+            return;
+
+        if (retryRoutine != null)
+        {
+            coroutineHost.StopCoroutine(retryRoutine);
+            retryRoutine = null;
+        }
+
+        retryRoutine =
+            coroutineHost.StartCoroutine(RetryLoop());
     }
 
     private byte[] CreateDataPacket(
         int sequence,
         byte[] payload)
     {
-        // 1 byte type
-        // 4 bytes sequence
-        // N bytes payload
-
         byte[] result =
             new byte[1 + 4 + payload.Length];
 
@@ -127,9 +163,6 @@ public class ReliableOrderedTransport : INetworkTransport
 
     private byte[] CreateAckPacket(int sequence)
     {
-        // 1 byte type
-        // 4 bytes sequence
-
         byte[] result =
             new byte[1 + 4];
 
@@ -184,21 +217,24 @@ public class ReliableOrderedTransport : INetworkTransport
         byte[] data,
         int sequence)
     {
-        Debug.Log(
-            $"[ReliableTransport] Receive DATA #{sequence}");
+        if (VerboseLogging)
+        {
+            Debug.Log(
+                $"[ReliableTransport] Receive DATA #{sequence}");
+        }
 
-        // Отправляем ACK сразу.
-        // ACK не проходит через reliable layer.
         byte[] ack =
             CreateAckPacket(sequence);
 
         innerTransport.Send(ack);
 
-        // Старый пакет.
         if (sequence < expectedReceiveSequence)
         {
-            Debug.Log(
-                $"[ReliableTransport] Duplicate DATA #{sequence}");
+            if (VerboseLogging)
+            {
+                Debug.Log(
+                    $"[ReliableTransport] Duplicate DATA #{sequence}");
+            }
 
             return;
         }
@@ -213,8 +249,6 @@ public class ReliableOrderedTransport : INetworkTransport
             0,
             payload.Length);
 
-        // Если пакет уже лежит в buffer,
-        // повторно его не сохраняем.
         if (!receiveBuffer.ContainsKey(sequence))
         {
             receiveBuffer.Add(
@@ -227,8 +261,11 @@ public class ReliableOrderedTransport : INetworkTransport
 
     private void HandleAckPacket(int sequence)
     {
-        Debug.Log(
-            $"[ReliableTransport] Receive ACK #{sequence}");
+        if (VerboseLogging)
+        {
+            Debug.Log(
+                $"[ReliableTransport] Receive ACK #{sequence}");
+        }
 
         pendingPackets.Remove(sequence);
     }
@@ -243,13 +280,7 @@ public class ReliableOrderedTransport : INetworkTransport
             receiveBuffer.Remove(
                 expectedReceiveSequence);
 
-            int deliveredSequence =
-                expectedReceiveSequence;
-
             expectedReceiveSequence++;
-
-            Debug.Log(
-                $"[ReliableTransport] Deliver DATA #{deliveredSequence}");
 
             MessageReceived?.Invoke(payload);
         }
@@ -307,10 +338,13 @@ public class ReliableOrderedTransport : INetworkTransport
                 packet.RetryCount++;
                 packet.LastSendTime = Time.time;
 
-                Debug.Log(
-                    $"[ReliableTransport] " +
-                    $"Retry DATA #{sequence}, " +
-                    $"attempt {packet.RetryCount}");
+                if (VerboseLogging)
+                {
+                    Debug.Log(
+                        $"[ReliableTransport] " +
+                        $"Retry DATA #{sequence}, " +
+                        $"attempt {packet.RetryCount}");
+                }
 
                 innerTransport.Send(packet.Data);
             }
