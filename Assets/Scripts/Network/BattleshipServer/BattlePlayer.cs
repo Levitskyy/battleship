@@ -6,6 +6,11 @@ public class BattlePlayer
 
     public BattleBoard Board { get; }
 
+    public bool IsConnected =>
+        Transport.IsConnected;
+
+    public float DisconnectedFor { get; private set; }
+
     public BattlePlayer(
         int id,
         INetworkTransport transport,
@@ -19,5 +24,23 @@ public class BattlePlayer
             new BattleBoard(
                 boardWidth,
                 boardHeight);
+    }
+
+    public void MarkDisconnected()
+    {
+        DisconnectedFor = 0f;
+    }
+
+    public void MarkReconnected()
+    {
+        DisconnectedFor = 0f;
+    }
+
+    public void Tick(float deltaTime)
+    {
+        if (IsConnected)
+            return;
+
+        DisconnectedFor += deltaTime;
     }
 }
