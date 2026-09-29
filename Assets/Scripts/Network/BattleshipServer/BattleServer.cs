@@ -277,11 +277,10 @@ public class BattleServer
             return;
         }
 
-        if (!result.Hit)
-        {
-            currentPlayerId =
-                defender.Id;
-        }
+        // if (!result.Hit)
+        // {
+            currentPlayerId = defender.Id;
+        // }
 
         SendTurnChanged();
     }
@@ -376,17 +375,10 @@ public class BattleServer
         int boardWidth = player.Board.Width;
         int boardHeight = player.Board.Height;
 
-        bool[,] myShots =
-            new bool[boardWidth, boardHeight];
-
-        bool[,] opponentShots =
-            new bool[boardWidth, boardHeight];
-
-        bool[,] myShotHit =
-            new bool[boardWidth, boardHeight];
-
-        bool[,] myShotSunk =
-            new bool[boardWidth, boardHeight];
+        bool[,] myShots = new bool[boardWidth, boardHeight];
+        bool[,] opponentShots = new bool[boardWidth, boardHeight];
+        bool[,] myShotHit = new bool[boardWidth, boardHeight];
+        bool[,] myShotSunk = new bool[boardWidth, boardHeight];
 
         for (int x = 0; x < boardWidth; x++)
         {
