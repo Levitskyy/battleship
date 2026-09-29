@@ -16,3 +16,4 @@ MonoBehaviour:
   boardHeight: 10
   shipCount: 5
   shipSizes: 0400000003000000030000000200000002000000
+  reconnectGraceSeconds: 20
