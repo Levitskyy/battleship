@@ -83,3 +83,4 @@ BattleClient <-> ReliableOrderedTransport <-> LocalTransport <-> ReliableOrdered
 - Сети нет: транспорт внутрипроцессный (`LocalTransport`). Интерфейс `INetworkTransport` позволяет подставить сокеты, но такой реализации нет.
 - **UI собирается кодом** (`BattleSceneSetup`), а не префабами и сценой: проект запускается настройки, но редактировать такой UI неудобно.
 - Нет автотестов. Логика сервера (`BattleBoard`, `BattleShipPlacer`, `BattleServer`) не зависит от MonoBehaviour в основном коде и хорошо ложится на тесты, но написаны они не были. Поведение проверялось вручную в Play Mode
+- Логи идут только в консоль, отдельно прочитать их в игре нельзя
